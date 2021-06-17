@@ -1,0 +1,87 @@
+import pandas as pd
+import numpy as np
+import warnings
+warnings.filterwarnings(action='ignore')
+pd.set_option('max_columns', 500)
+
+X_test=pd.read_csv('data/X_test.csv')
+X_train=pd.read_csv('data/X_train.csv')
+y_train=pd.read_csv('data/y_train.csv')
+train_data=pd.merge(X_train, y_train)
+
+#결측값 처리
+train_data['환불금액']=train_data['환불금액'].fillna(0)
+X_test['환불금액']=X_test['환불금액'].fillna(0)
+
+#이상값 처리
+def cut_outlier(df2, columns):
+	df=df2.copy()
+	for column in columns:
+		q1=df[column].quantile(.25)
+		q3=df[column].quantile(.75)
+		iqr=q3-q1
+		low=q1-1.5*iqr
+		high=q3+1.5*iqr
+		df.loc[df[column]<low, column]=low
+		df.loc[df[column]>high, column]=high
+	return df
+
+cut_train_data=cut_outlier(train_data, ['총구매액', '최대구매액', '환불금액', '내점일수', '내점당구매건수', '주말방문비율', '구매주기'])
+cut_test_data=cut_outlier(X_test, ['총구매액', '최대구매액', '환불금액', '내점일수', '내점당구매건수', '주말방문비율', '구매주기'])
+
+#더미
+train_data_dum=pd.get_dummies(cut_train_data)
+test_data_dum=pd.get_dummies(cut_test_data)
+final_train_data, final_test_data = train_data_dum.align(test_data_dum, join='left', axis=1, fill_value=0)
+final_test_data.drop(['gender'], axis=1, inplace=True)
+
+#모델링
+from sklearn.ensemble import RandomForestClassifier
+#rf_clf=RandomForestClassifier()
+
+#import random
+#max_depth=[2,3,4,5]
+#min_samples_leaf=[1,3,5]
+#min_samples_split=[2,4,6]
+#max_features=['auto', 'sqrt']
+#bootstrap=[True, False]
+#n_estimators=list(range(100,200))
+
+#rf_params={'max_depth': max_depth, 'min_samples_leaf': min_samples_leaf, 'min_samples_split': min_samples_split, 'max_features': max_features, 'bootstrap': bootstrap, 'n_estimators': n_estimators}
+
+
+#from sklearn.model_selection import RandomizedSearchCV
+#random_rf=RandomizedSearchCV(estimator=rf_clf, param_distributions=rf_params, cv=3, scoring='roc_auc', refit=True, return_train_score=True, n_iter=10)
+
+#from sklearn.model_selection import train_test_split
+X=final_train_data.drop(['cust_id','gender'], axis=1)
+Y=final_train_data[['gender']]
+col_id=final_train_data[['cust_id']]
+
+#random_rf.fit(X, Y)
+#result_rf=random_rf.cv_results_
+#result_rf=pd.DataFrame(result_rf)
+#result_rf=result_rf.loc[:, ['mean_test_score', 'params']]
+
+#a=result_rf.sort_values('mean_test_score', ascending=False).reset_index()
+#print(a['mean_test_score'][0])
+#final_params=a['params'][0]
+
+from sklearn.ensemble import RandomForestClassifier
+rf_clf=RandomForestClassifier(n_estimators=178, min_samples_split=6, min_samples_leaf=1, max_features='auto', max_depth=5, bootstrap=True)
+rf_clf.fit(X, Y)
+
+final_test_data_1=final_test_data.drop(['cust_id'], axis=1)
+final_test_data_0=final_test_data[['cust_id']]
+
+pred_y_0=pd.Series(rf_clf.predict_proba(final_test_data_1)[:,1], name='predict')
+result=pd.concat([final_test_data_0, pred_y_0], axis=1)
+
+result.to_csv('201620425.csv', index=False)
+
+print(result.head(50))
+
+
+
+
+
